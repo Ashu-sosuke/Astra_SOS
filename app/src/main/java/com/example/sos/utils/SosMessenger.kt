@@ -10,7 +10,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
 fun openSmsMessenger(
-    context: Context,
     phone: String,
     latitude: Double,
     longitude: Double,
@@ -29,14 +28,25 @@ Google Maps:
 https://maps.google.com/?q=$latitude,$longitude
     """.trimIndent()
 
-    val intent = Intent(Intent.ACTION_SENDTO).apply {
+    try {
 
-        data = Uri.parse("smsto:$phone")
+        val smsManager = SmsManager.getDefault()
 
-        putExtra("sms_body", message)
+        smsManager.sendTextMessage(
+            phone,
+            null,
+            message,
+            null,
+            null
+        )
+
+        Log.d("SOS message", "SMS sent to $phone")
+
+    } catch (e: Exception) {
+
+        Log.e("SOS message", "SMS failed: ${e.message}")
+
     }
-
-    context.startActivity(intent)
 }
 
 fun getTrustedContacts(onResult: (List<String>) -> Unit) {
@@ -49,6 +59,7 @@ fun getTrustedContacts(onResult: (List<String>) -> Unit) {
     }
 
     FirebaseFirestore.getInstance()
+        
         .collection("users")
         .document(userId)
         .collection("trusted_contacts")

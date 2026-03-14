@@ -248,7 +248,7 @@ fun SosButton(sosViewModel: SosViewModel, safetyViewModel: SafetyModeViewModel) 
                         "https://ashu-sosuke.github.io/Astra-Map/?incident=$incidentId"
                     getTrustedContacts { contacts ->
                         contacts.forEach { phone ->
-                            openSmsMessenger(context, phone, lat, lng, trackingLink)
+                            openSmsMessenger(phone, lat, lng, trackingLink)
                         }
                     }
 
