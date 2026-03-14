@@ -5,12 +5,6 @@
 # AstraSOS
 ### AI-Powered Emergency Detection System
 
-[![Android](https://img.shields.io/badge/Android-Kotlin-green?logo=android)](https://github.com/Ashu-sosuke/Astra_SOS)
-[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi)](https://github.com/Ashu-sosuke/Astra_SOS)
-[![Firebase](https://img.shields.io/badge/Cloud-Firebase-FFCA28?logo=firebase)](https://github.com/Ashu-sosuke/Astra_SOS)
-[![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
-[![Phase](https://img.shields.io/badge/Phase-1%20Complete-E8344A)](https://github.com/Ashu-sosuke/Astra_SOS)
-
 > *"The best emergency system is the one that works when you can't."*
 
 </div>
@@ -180,7 +174,7 @@ Firestore listener triggers FastAPI server
 
 > **Home Screen** — One-tap SOS with live status indicator
 
-![Home Screen](screenshots/home_screen.png)
+![Home Screen]()
 
 > **AI Processing View** — Real-time analysis progress
 
