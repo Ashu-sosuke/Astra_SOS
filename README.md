@@ -174,15 +174,11 @@ Firestore listener triggers FastAPI server
 
 > **Home Screen** — One-tap SOS with live status indicator
 
-![Home Screen]()
+![Home Screen](screenshots/home_screen.png)
 
 > **AI Processing View** — Real-time analysis progress
 
 ![AI Analysis](screenshots/ai_analysis.png)
-
-> **Alert Sent** — Contact notified with live GPS map
-
-![Alert Screen](screenshots/alert_screen.png)
 
 > **Admin Dashboard** — Real-time incident monitoring
 
