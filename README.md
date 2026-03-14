@@ -186,60 +186,6 @@ Firestore listener triggers FastAPI server
 
 ---
 
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Android Studio Hedgehog or later
-- Python 3.10+
-- Firebase project set up
-- Ollama installed locally or on server
-
-### Android Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/Ashu-sosuke/Astra_SOS.git
-cd Astra_SOS
-
-# Open in Android Studio
-# Add your google-services.json to /app directory
-# Sync Gradle and run on device/emulator
-```
-
-### Backend Setup
-
-```bash
-# Navigate to backend directory
-cd backend
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Add Firebase service account key
-# Place serviceAccountKey.json in /backend directory
-
-# Start the FastAPI server
-uvicorn main:app --reload --port 8000
-```
-
-### Environment Variables
-
-Create a `.env` file in the backend directory:
-
-```env
-FIREBASE_CREDENTIALS=serviceAccountKey.json
-OLLAMA_HOST=http://localhost:11434
-WHISPER_MODEL=base
-SEVERITY_HIGH_THRESHOLD=61
-SEVERITY_MEDIUM_THRESHOLD=31
-```
-
----
 
 ## 📁 Project Structure
 
@@ -270,39 +216,6 @@ Astra_SOS/
 
 ---
 
-## 🔭 Roadmap
-
-### ✅ Phase 1 — Complete
-- [x] Android app with one-tap SOS
-- [x] Firebase Storage + Firestore integration
-- [x] FastAPI AI pipeline (Whisper + Ollama + Librosa + DistilBERT)
-- [x] Fusion Engine with severity scoring
-- [x] Real-time GPS sharing
-- [x] Trusted contact alert system
-
-### 🔄 Phase 2 — In Progress
-- [ ] WebSocket real-time streaming (sub-2s detection)
-- [ ] Wearable device integration (Android Wear / Fitbit)
-- [ ] Improved threat classification accuracy
-
-### 🔭 Phase 3 — Planned
-- [ ] Multi-language detection (Hindi, Spanish, French)
-- [ ] Government emergency API integration (112 India)
-- [ ] On-device AI inference for offline support
-
----
-
-## 🤝 Contributing
-
-Contributions, issues, and feature requests are welcome!
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
----
 
 ## 👨‍💻 Author
 
@@ -315,11 +228,7 @@ Contributions, issues, and feature requests are welcome!
 
 ---
 
-## 📄 License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
-
----
 
 <div align="center">
 
