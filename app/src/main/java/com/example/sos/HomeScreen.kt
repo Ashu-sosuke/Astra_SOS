@@ -245,8 +245,7 @@ fun SosButton(sosViewModel: SosViewModel, safetyViewModel: SafetyModeViewModel) 
                     val lng = location.longitude
 
                     val trackingLink =
-                        "https://ashu-sosuke.github.io/Astra-Map/live.html?incident=$incidentId"
-
+                        "https://ashu-sosuke.github.io/Astra-Map/?incident=$incidentId"
                     getTrustedContacts { contacts ->
                         contacts.forEach { phone ->
                             openSmsMessenger(context, phone, lat, lng, trackingLink)
