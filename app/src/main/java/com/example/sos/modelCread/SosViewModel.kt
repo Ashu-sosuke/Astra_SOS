@@ -1,8 +1,10 @@
 package com.example.sos.modelCread
 
+import android.app.Application
 import android.content.Context
 import android.util.Log
 import androidx.core.net.toUri
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
@@ -14,8 +16,9 @@ import kotlinx.coroutines.tasks.await
 import java.io.File
 import java.util.*
 
-class SosViewModel(private val context: Context) : ViewModel() {
+class SosViewModel(application: Application) : AndroidViewModel(application) {
 
+    val context = getApplication<Application>()
     private val storage = FirebaseStorage.getInstance()
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()

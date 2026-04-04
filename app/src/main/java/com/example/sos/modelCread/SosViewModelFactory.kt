@@ -1,14 +1,18 @@
 package com.example.sos.modelCread
 
-import android.content.Context
+import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 
 class SosViewModelFactory(
-    private val context: Context
+    private val application: Application
 ) : ViewModelProvider.Factory {
 
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        return SosViewModel(context) as T
+        if (modelClass.isAssignableFrom(SosViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return SosViewModel(application) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
 }

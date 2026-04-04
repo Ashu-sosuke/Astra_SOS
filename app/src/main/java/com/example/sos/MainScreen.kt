@@ -9,6 +9,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.sos.location.SafetyModeViewModel
 import com.example.sos.loginCred.AuthViewModel
 import com.example.sos.utils.BottomNavBar
 
@@ -16,6 +17,10 @@ import com.example.sos.utils.BottomNavBar
 fun MainScreen(rootNavController: NavHostController, authViewModel: AuthViewModel) {
 
     val bottomNavController = rememberNavController()
+
+    // ✅ Single shared instance — both HomeScreen and LocationScreen use this
+    val safetyViewModel: SafetyModeViewModel = viewModel()
+
     Scaffold(
         bottomBar = {
             BottomNavBar(navController = bottomNavController)
@@ -29,7 +34,9 @@ fun MainScreen(rootNavController: NavHostController, authViewModel: AuthViewMode
         ) {
 
             composable(Screen.HomeScreen.route) {
-                HomeScreen()
+                HomeScreen(
+                    safetyViewModel = safetyViewModel    // ✅ pass shared instance
+                )
             }
 
             composable(Screen.Contacts.route) {
@@ -39,15 +46,15 @@ fun MainScreen(rootNavController: NavHostController, authViewModel: AuthViewMode
             }
 
             composable(Screen.SafetyModeScreen.route) {
-                SafetyModeScreen(onBack = {
-                    bottomNavController.popBackStack()
-                })
+                LocationScreen(
+                    onBack          = { bottomNavController.popBackStack() },
+                    safetyViewModel = safetyViewModel
+                )
             }
 
             composable(Screen.SafetySettingsScreen.route) {
-                SafetySettingsScreen(onBack = {
-                    bottomNavController.popBackStack()
-                },
+                SafetySettingsScreen(
+                    onBack        = { bottomNavController.popBackStack() },
                     navController = rootNavController,
                     authViewModel
                 )

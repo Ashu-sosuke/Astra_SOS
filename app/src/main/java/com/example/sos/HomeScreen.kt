@@ -1,11 +1,13 @@
 package com.example.sos
 
 import android.Manifest
+import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresPermission
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,16 +62,17 @@ import com.google.android.gms.location.Priority
 
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    safetyViewModel: SafetyModeViewModel = viewModel()
+
+) {
 
     val context = LocalContext.current
     val systemUiController = rememberSystemUiController()
 
     val sosViewModel: SosViewModel = viewModel(
-        factory = SosViewModelFactory(context)
+        factory = SosViewModelFactory(context.applicationContext as Application)
     )
-
-    val safetyViewModel: SafetyModeViewModel = viewModel()
 
     SideEffect {
         systemUiController.setStatusBarColor(
@@ -99,7 +103,7 @@ fun HomeScreen() {
             Spacer(modifier = Modifier.height(24.dp))
             StatusChip()
             Spacer(modifier = Modifier.height(40.dp))
-            TitleSection()
+            TitleSection(safetyViewModel)
             Spacer(modifier = Modifier.height(40.dp))
             SosButton(
                 sosViewModel = sosViewModel,
@@ -154,7 +158,12 @@ fun StatusChip() {
 }
 
 @Composable
-fun TitleSection() {
+fun TitleSection(safetyModeViewModel: SafetyModeViewModel) {
+    val primaryBlue = Color(0xFF1F5EFF)
+    val isSosActive by safetyModeViewModel.isSosActive.collectAsState()
+
+
+
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = "Tap ",
@@ -181,6 +190,23 @@ fun TitleSection() {
             fontSize = 14.sp,
             textAlign = TextAlign.Center
         )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+
+        if (isSosActive) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = { safetyModeViewModel.stopSOS() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = primaryBlue)
+            ) {
+                Text("I am Safe", color = Color.White, fontSize = 16.sp)
+            }
+        }
     }
 }
 
@@ -194,6 +220,7 @@ fun SosButton(sosViewModel: SosViewModel, safetyViewModel: SafetyModeViewModel) 
         LocationServices.getFusedLocationProviderClient(context)
 
     // 🔥 Define function FIRST
+    @RequiresPermission(anyOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     fun startSosFlow() {
 
         loading = true

@@ -1,367 +1,378 @@
 package com.example.sos
 
-
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.sos.location.LiveLocationMap
 import com.example.sos.location.SafetyModeViewModel
+import com.example.sos.location.data.CrimeIncident
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.*
+import com.google.maps.android.compose.*
 import kotlinx.coroutines.delay
-
+import kotlinx.coroutines.launch
 
 @Composable
-fun SafetyModeScreen(
+fun LocationScreen(
     onBack: () -> Unit,
-    viewModel: SafetyModeViewModel = viewModel()
+    safetyViewModel: SafetyModeViewModel = viewModel()
 ) {
+    val context        = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
-    val startTime = remember { System.currentTimeMillis() }
-    var elapsed by remember { mutableStateOf(0L) }
+    // ── State ────────────────────────────────────────────────────────────
+    val currentLocation by safetyViewModel.location.collectAsState()
+    val isLoading       by safetyViewModel.isLoadingIncidents.collectAsState()
+    val isSosActive     by safetyViewModel.isSosActive.collectAsState()
+    val incidents: List<CrimeIncident> by safetyViewModel.incidents
+        .observeAsState(initial = emptyList())
 
-    LaunchedEffect(true) {
-        while (true) {
-            elapsed = System.currentTimeMillis() - startTime
-            delay(1000)
+    // ── Timer — resets when SOS becomes active ───────────────────────────
+    var elapsed      by remember { mutableStateOf(0L) }
+    var sosStartTime by remember { mutableStateOf(0L) }
+    LaunchedEffect(isSosActive) {
+        if (isSosActive) {
+            sosStartTime = System.currentTimeMillis()
+            while (isSosActive) {
+                elapsed = System.currentTimeMillis() - sosStartTime
+                if (!isSosActive) break
+                delay(1000)
+            }
+        } else {
+            elapsed = 0L
         }
     }
 
-    val background = Color(0xFF0B1220)
-    val card = Color(0xFF151E30)
-    val primaryBlue = Color(0xFF1F5EFF)
-    val location by viewModel.location.collectAsState()
-    val context = LocalContext.current
-    val history by viewModel.locationHistory.collectAsState()
+    // ── Camera ───────────────────────────────────────────────────────────
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(LatLng(22.5, 80.0), 5f)
+    }
 
-
-    val permissionLauncher =
-        rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.RequestMultiplePermissions()
-        ) { permissions ->
-
-            val fineGranted =
-                permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
-
-            if (fineGranted) {
-                viewModel.startSOS()
-            }
-        }
-    val seconds = (elapsed / 1000) % 60
-    val minutes = (elapsed / 60000) % 60
-    val hours = elapsed / 3600000
-
-    DisposableEffect(Unit) {
-
-        val fineLocationGranted =
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-
-        if (fineLocationGranted) {
-            viewModel.startSOS()
-        } else {
-            permissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
+    var centeredOnce by remember { mutableStateOf(false) }
+    LaunchedEffect(currentLocation) {
+        if (currentLocation != null && !centeredOnce) {
+            centeredOnce = true
+            cameraPositionState.animate(
+                CameraUpdateFactory.newLatLngZoom(
+                    LatLng(currentLocation!!.latitude, currentLocation!!.longitude), 15f
+                ), 1200
             )
+        }
+    }
+
+    // ── Permission launcher ───────────────────────────────────────────────
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
+            safetyViewModel.startLocationTracking()
+            safetyViewModel.loadIncidentsFromFirestore()
+        }
+    }
+
+    // ── Start tracking on screen open ─────────────────────────────────────
+    DisposableEffect(Unit) {
+        val granted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (granted) {
+            safetyViewModel.startLocationTracking()
+            safetyViewModel.loadIncidentsFromFirestore()
+        } else {
+            permissionLauncher.launch(arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ))
         }
 
         onDispose {
-            viewModel.stopSOS()
+            safetyViewModel.stopSOS()
         }
     }
 
-    Column(
-        modifier = Modifier
-            .verticalScroll(rememberScrollState())
-            .fillMaxSize()
-            .background(background)
-            .padding(16.dp)
-    ) {
+    // ── UI ────────────────────────────────────────────────────────────────
+    Box(modifier = Modifier.fillMaxSize()) {
 
-        // Top Bar
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Default.ArrowBack,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier
-                    .clickable{onBack()}
+        // ── Google Map ────────────────────────────────────────────────────
+        GoogleMap(
+            modifier            = Modifier.fillMaxSize(),
+            cameraPositionState = cameraPositionState,
+            properties = MapProperties(
+                mapType             = MapType.NORMAL,
+                isMyLocationEnabled = false
+            ),
+            uiSettings = MapUiSettings(
+                zoomControlsEnabled     = false,
+                myLocationButtonEnabled = false,
+                compassEnabled          = true
             )
-            Spacer(Modifier.width(12.dp))
-            Text(
-                text = "Location Sharing",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium
+        ) {
+            // ── Blue dot — always visible on map screen ───────────────────
+            currentLocation?.let { loc ->
+                Marker(
+                    state = MarkerState(position = LatLng(loc.latitude, loc.longitude)),
+                    title = "You are here",
+                    icon  = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
+
+                )
+            }
+
+            // ── Crime circles ─────────────────────────────────────────────
+            incidents.forEach { incident: CrimeIncident ->
+                val pos = LatLng(incident.latitude, incident.longitude)
+
+                val (fillCol, strokeCol) = when (incident.category) {
+                    "Murder"            -> Pair(Color(0x55FF0000), Color(0xCCFF0000))
+                    "Rape", "Assault"   -> Pair(Color(0x55FF8800), Color(0xCCFF8800))
+                    "Missing", "Kidnap" -> Pair(Color(0x550055FF), Color(0xCC0055FF))
+                    else                -> Pair(Color(0x55888888), Color(0xCC888888))
+                }
+
+                val baseRadius  = 8_000.0
+                val outerRadius = baseRadius * incident.severity
+                val innerRadius = baseRadius * incident.severity * 0.4
+
+                Circle(
+                    center      = pos,
+                    radius      = outerRadius,
+                    fillColor   = fillCol,
+                    strokeColor = strokeCol,
+                    strokeWidth = 1.5f
+                )
+
+                Circle(
+                    center      = pos,
+                    radius      = innerRadius,
+                    fillColor   = strokeCol,
+                    strokeColor = strokeCol,
+                    strokeWidth = 2f
+                )
+            }
+        }
+
+        // ── Loading spinner ───────────────────────────────────────────────
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier    = Modifier
+                    .align(Alignment.Center)
+                    .padding(bottom = 200.dp),
+                color       = Color.White,
+                strokeWidth = 3.dp
             )
         }
 
-        Spacer(Modifier.height(16.dp))
+        // ── SOS timer bar — only when active ─────────────────────────────
+        if (isSosActive) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 16.dp, start = 16.dp, end = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Card(
+                    shape  = RoundedCornerShape(50),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.Black.copy(alpha = 0.85f)
+                    ),
+                    elevation = CardDefaults.cardElevation(8.dp)
+                ) {
+                    Row(
+                        modifier              = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(Color.Red)
+                        )
+                        Text(
+                            text       = "SOS ACTIVE  •  ${formatElapsed(elapsed)}",
+                            color      = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize   = 14.sp
+                        )
+                    }
+                }
 
-        // Emergency Header
-        Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                currentLocation?.let { loc ->
+                    Card(
+                        shape  = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.Black.copy(alpha = 0.70f)
+                        )
+                    ) {
+                        Text(
+                            text = "📍 ${"%.5f".format(loc.latitude)}, " +
+                                    "${"%.5f".format(loc.longitude)}  " +
+                                    "±${loc.accuracy.toInt()}m",
+                            color    = Color.White,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── Right side FABs ───────────────────────────────────────────────
+        Column(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            FloatingActionButton(
+                onClick = {
+                    currentLocation?.let { loc ->
+                        coroutineScope.launch {
+                            cameraPositionState.animate(
+                                CameraUpdateFactory.newLatLngZoom(
+                                    LatLng(loc.latitude, loc.longitude), 16f
+                                ), 800
+                            )
+                        }
+                    }
+                },
+                modifier       = Modifier.size(48.dp),
+                shape          = CircleShape,
+                containerColor = Color.White,
+                contentColor   = Color(0xFF1A73E8)
+            ) {
+                Icon(
+                    imageVector        = Icons.Default.LocationOn,
+                    contentDescription = "Go to my location",
+                    modifier           = Modifier.size(22.dp)
+                )
+            }
+
+            FloatingActionButton(
+                onClick = {
+                    coroutineScope.launch {
+                        cameraPositionState.animate(CameraUpdateFactory.zoomIn(), 300)
+                    }
+                },
+                modifier       = Modifier.size(48.dp),
+                shape          = CircleShape,
+                containerColor = Color.White,
+                contentColor   = Color.Black
+            ) {
+                Text("+", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            }
+
+            FloatingActionButton(
+                onClick = {
+                    coroutineScope.launch {
+                        cameraPositionState.animate(CameraUpdateFactory.zoomOut(), 300)
+                    }
+                },
+                modifier       = Modifier.size(48.dp),
+                shape          = CircleShape,
+                containerColor = Color.White,
+                contentColor   = Color.Black
+            ) {
+                Text("−", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        // ── Legend ────────────────────────────────────────────────────────
+        Card(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 12.dp, bottom = 90.dp),
+            shape  = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.Black.copy(alpha = 0.80f)
+            ),
+            elevation = CardDefaults.cardElevation(6.dp)
+        ) {
+            Column(modifier = Modifier.padding(10.dp)) {
+                LegendItem(Color.Red,           "Murder")
+                LegendItem(Color(0xFFFF8800),   "Rape / Assault")
+                LegendItem(Color(0xFF1A73E8),   "Missing Person")
+                LegendItem(Color(0xFF888888),   "Other Cases")
+                LegendItem(Color(0xFF1A73E8),   "Your Location", isPin = true)
+            }
+        }
+
+        // ── STOP SOS — only when active ───────────────────────────────────
+        if (isSosActive) {
+            Button(
+                onClick = {
+                    safetyViewModel.stopSOS()
+                    onBack()
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 12.dp, bottom = 90.dp)
+                    .shadow(8.dp, RoundedCornerShape(50)),
+                colors         = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                shape          = RoundedCornerShape(50),
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)
+            ) {
+                Text(
+                    "STOP SOS",
+                    color      = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 15.sp
+                )
+            }
+        }
+    }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+@Composable
+private fun LegendItem(
+    color: Color,
+    label: String,
+    isPin: Boolean = false
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier          = Modifier.padding(vertical = 3.dp)
+    ) {
+        if (isPin) {
+            Text("📍", fontSize = 12.sp)
+        } else {
             Box(
                 modifier = Modifier
                     .size(10.dp)
-                    .background(Color.Red, CircleShape)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "EMERGENCY ACTIVE",
-                color = Color.Red,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
+                    .clip(CircleShape)
+                    .background(color)
             )
         }
-
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-            text = "Safety Mode Active",
-            color = Color.White,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        Text(
-            text = "Sharing real-time location tracking",
-            color = Color.LightGray,
-            fontSize = 14.sp
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        // Timer
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TimerBox(hours.toString().padStart(2,'0'), "HRS")
-            TimerBox(minutes.toString().padStart(2,'0'), "MIN")
-            TimerBox(seconds.toString().padStart(2,'0'), "SEC")
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Map Preview
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp)
-        ) {
-
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                LiveLocationMap(
-                    latitude = location?.latitude,
-                    longitude = location?.longitude,
-                    history = history
-                )
-            }
-
-            // Live Badge
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(12.dp)
-                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = "● Live GPS",
-                    color = Color.Green,
-                    fontSize = 12.sp
-                )
-            }
-        }
-
-
-
-        Spacer(Modifier.height(24.dp))
-
-        // Trusted Contacts
-        SectionHeader("Trusted Contacts", "Manage")
-
-        ContactRow("Mom", true)
-        ContactRow("Partner", true)
-
-        Spacer(Modifier.height(24.dp))
-
-        // Community & Authorities
-        SectionHeader("Community & Authorities")
-
-        AuthorityRow(
-            title = "Community Shield",
-            subtitle = "Alert sent to 12 nearby volunteers",
-            enabled = true
-        )
-
-        AuthorityRow(
-            title = "Local Police",
-            subtitle = "Dispatch Notified",
-            enabled = true
-        )
-
-        AuthorityRow(
-            title = "Nearest Hospital",
-            subtitle = "Share if injured",
-            enabled = false
-        )
-
-        Spacer(Modifier.weight(1f))
-
-        // Buttons
-        Button(
-            onClick = {
-                viewModel.stopSOS()
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = primaryBlue)
-        ) {
-            Text("I am Safe", color = Color.White, fontSize = 16.sp)
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        OutlinedButton(
-            onClick = {},
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Text("Stop Sharing Only", color = Color.White)
-        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(label, color = Color.White, fontSize = 11.sp)
     }
 }
 
-@Composable
-fun TimerBox(value: String, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .size(64.dp)
-                .background(Color(0xFF1E2A44), RoundedCornerShape(12.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = value,
-                color = Color.White,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(label, color = Color.Gray, fontSize = 12.sp)
-    }
+private fun formatElapsed(ms: Long): String {
+    val s = ms / 1000
+    return "%02d:%02d:%02d".format(s / 3600, (s % 3600) / 60, s % 60)
 }
-
-@Composable
-fun SectionHeader(title: String, action: String? = null) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            title,
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.weight(1f)
-        )
-        action?.let {
-            Text(it, color = Color(0xFF3D6BFF), fontSize = 14.sp)
-        }
-    }
-}
-
-@Composable
-fun ContactRow(name: String, enabled: Boolean) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .background(Color(0xFF151E30), RoundedCornerShape(16.dp))
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .background(Color.Gray, CircleShape)
-        )
-
-        Spacer(Modifier.width(12.dp))
-
-        Column(Modifier.weight(1f)) {
-            Text(name, color = Color.White, fontWeight = FontWeight.Medium)
-            Text("Notified", color = Color(0xFF4CAF50), fontSize = 12.sp)
-        }
-
-        Switch(checked = enabled, onCheckedChange = {})
-    }
-}
-
-@Composable
-fun AuthorityRow(title: String, subtitle: String, enabled: Boolean) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .background(Color(0xFF151E30), RoundedCornerShape(16.dp))
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .background(Color(0xFF1E2A44), CircleShape)
-        )
-
-        Spacer(Modifier.width(12.dp))
-
-        Column(Modifier.weight(1f)) {
-            Text(title, color = Color.White)
-            Text(subtitle, color = Color.Gray, fontSize = 12.sp)
-        }
-
-        Switch(checked = enabled, onCheckedChange = {})
-    }
-}
-

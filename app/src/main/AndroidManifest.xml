@@ -21,6 +21,7 @@
 
 
     <application
+        android:name=".CrimeMapApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -30,9 +31,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.SOS"
         android:usesCleartextTraffic="true">
+
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyD_jFNR3UDUiFMNza_Dz5vWStv6cUgO8ZU"/>
+            android:value="${MAPS_API_KEY}" />
         <service
             android:name=".location.ForegroundLocationService"
             android:exported="false"
