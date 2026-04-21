@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.location.Geocoder
 import android.location.Location
 import android.os.Build
 import android.util.Log
@@ -19,9 +20,12 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 
 data class LocationData(
     val latitude: Double,
@@ -202,50 +206,87 @@ class SafetyModeViewModel(application: Application) : AndroidViewModel(applicati
     // Crime Incidents — Firestore (primary)
     // ════════════════════════════════════════════════════════════════════
 
+    @Suppress("DEPRECATION")
+    suspend fun getLatLngFromCity(context: Context, city: String): Pair<Double, Double>? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val geocoder = Geocoder(context)
+                val query = "$city, India"
+
+                val addresses = geocoder.getFromLocationName(query, 1)
+
+                if (!addresses.isNullOrEmpty()) {
+                    val loc = addresses[0]
+                    Log.d("GEOCODER", "$city -> ${loc.latitude}, ${loc.longitude}")
+                    Pair(loc.latitude, loc.longitude)
+                } else {
+                    Log.e("GEOCODER", "No result for $city")
+                    null
+                }
+            } catch (e: Exception) {
+                Log.e("GEOCODER", "Failed for $city: ${e.message}")
+                null
+            }
+        }
+    }
+
     fun loadIncidentsFromFirestore() {
         _isLoadingIncidents.value = true
 
-        FirebaseFirestore.getInstance()
-            .collection("crime_incidents")
-            .whereGreaterThanOrEqualTo("date", "2026-01-01")
-            .get()
-            .addOnSuccessListener { documents ->
-                val fetched = documents.mapNotNull { doc ->
+        viewModelScope.launch {
+            try {
+                val snapshot = firestore
+                    .collection("crime_incidents")
+                    .get()
+                    .await()
+
+                val result = mutableListOf<CrimeIncident>()
+
+                for (doc in snapshot.documents) {
                     try {
-                        CrimeIncident(
-                            title       = doc.getString("summary")    ?: "",
-                            description = doc.getString("summary")    ?: "",
-                            category    = doc.getString("category")   ?: "Other",
-                            date        = doc.getString("date")       ?: "",
-                            latitude    = doc.getDouble("latitude")   ?: return@mapNotNull null,
-                            longitude   = doc.getDouble("longitude")  ?: return@mapNotNull null,
-                            city        = doc.getString("city")       ?: "",
-                            state       = doc.getString("state")      ?: "",
-                            severity    = (doc.getLong("severity")    ?: 5L).toInt(),
+                        val city = doc.getString("city") ?: ""
+
+                        val lat = doc.getDouble("latitude")
+                        val lng = doc.getDouble("longitude")
+
+                        if (lat == null || lng == null) {
+                            Log.e("MAP", "Skipping $city — no coords in doc")
+                            continue
+                        }
+
+                        val incident = CrimeIncident(
+                            title       = doc.getString("summary") ?: "",
+                            description = doc.getString("summary") ?: "",
+                            category    = doc.getString("category") ?: "Other",
+                            date        = doc.getString("date") ?: "",
+                            city        = city,
+                            state       = doc.getString("state") ?: "",
+                            severity    = (doc.getLong("severity") ?: 5L).toInt(),
                             victimCount = (doc.getLong("victimCount") ?: 1L).toInt(),
+                            latitude    = lat,
+                            longitude   = lng,
                             source      = "Firestore"
                         )
+
+                        result.add(incident)
+
                     } catch (e: Exception) {
                         Log.e("FIRESTORE", "Parse error: ${e.message}")
-                        null
                     }
                 }
 
-                Log.d("FIRESTORE", "Loaded ${fetched.size} incidents")
-                _incidents.value = fetched
+                _incidents.value = result
                 _isLoadingIncidents.value = false
+                db.crimeDao().insertAll(result)
 
-                // Cache in Room for offline fallback
-                viewModelScope.launch {
-                    db.crimeDao().insertAll(fetched)
-                }
-            }
-            .addOnFailureListener { e ->
+            } catch (e: Exception) {
                 Log.e("FIRESTORE", "Fetch failed: ${e.message}")
                 _isLoadingIncidents.value = false
-                loadIncidentsFromRoom()   // fallback to local cache
+                loadIncidentsFromRoom()
             }
+        }
     }
+
 
     // Crime Incidents — Room (offline fallback)
     fun loadIncidentsFromRoom() {
